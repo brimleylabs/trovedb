@@ -1,3 +1,1 @@
-"""Screen definitions for the trovedb TUI."""
-
-from __future__ import annotations
+"""Screen classes for the trovedb TUI."""
