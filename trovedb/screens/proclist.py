@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 _HINT = (
     "W: watch  R: refresh  K: kill  E: explain  C: copy"
-    "  L: locks  /: filter  Esc: back  q: quit"
+    "  L: locks  S: schema  Shift+Q: query  /: filter  ?: help  Esc: back  q: quit"
 )
 
 # Interval shortcut key → seconds.

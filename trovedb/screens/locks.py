@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 _HINT = (
     "W: watch  R: refresh  K: kill holder  E: explain  C: copy"
-    "  /: filter  Esc: back  q: quit"
+    "  S: schema  Shift+Q: query  /: filter  ?: help  Esc: back  q: quit"
 )
 
 _INTERVAL_KEYS: dict[str, int] = {"2": 2, "5": 5, "1": 10, "3": 30}

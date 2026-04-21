@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 _HINT = (
     "Enter: select  /: filter  D: copy DDL  R: refresh  Shift+R: full refresh"
-    "  Esc: back  q: quit"
+    "  Shift+Q: query  ?: help  Esc: back  q: quit"
 )
 
 

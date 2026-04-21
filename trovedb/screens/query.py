@@ -40,7 +40,8 @@ from trovedb.data import QueryHistory, get_queries_dir, is_write_query
 logger = logging.getLogger(__name__)
 
 _HINT = (
-    "F5: run  Ctrl+R: history  Ctrl+S: save  Ctrl+L: clear  Esc: back  q: quit"
+    "F5: run  Ctrl+R: history  Ctrl+S: save  Ctrl+L: clear"
+    "  ?: help  Esc: back  q: quit"
 )
 _RESULT_LIMIT = 1000
 
