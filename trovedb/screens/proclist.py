@@ -286,6 +286,7 @@ class ProclistScreen(Screen[None]):
         Binding("1", "set_interval('1')", "10s", show=False),
         Binding("3", "set_interval('3')", "30s", show=False),
         Binding("l", "open_locks", "Locks", show=False),
+        Binding("s", "open_schema", "Schema", show=False),
         Binding("slash", "open_filter", "Filter", show=False),
         Binding("escape", "go_back", "Back", show=False),
         Binding("q", "quit", "Quit", show=False),
@@ -696,6 +697,18 @@ class ProclistScreen(Screen[None]):
 
         self.app.push_screen(
             LocksScreen(
+                self._profile,
+                self._connector,
+                self._connection,
+            )
+        )
+
+    def action_open_schema(self) -> None:
+        """Push the schema browser SchemaScreen (S)."""
+        from trovedb.screens.schema import SchemaScreen  # lazy import to avoid cycles
+
+        self.app.push_screen(
+            SchemaScreen(
                 self._profile,
                 self._connector,
                 self._connection,
