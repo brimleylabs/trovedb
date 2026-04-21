@@ -17,6 +17,7 @@ dependencies = [
     "aiosqlite>=0.20",
     "platformdirs>=4.0",
     "pydantic>=2.0",
+    "pyperclip>=1.8",
 ]
 
 [project.scripts]

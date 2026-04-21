@@ -100,3 +100,4 @@ class Connection:
     driver: str
     dsn: str | None = None
     connected: bool = False
+    backend_pid: int | None = None
