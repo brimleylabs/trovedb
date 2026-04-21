@@ -113,37 +113,55 @@ class PostgresConnector:
     # list_tables
     # ------------------------------------------------------------------
 
-    async def list_tables(self, db: str) -> list[Table]:
-        """Return tables and views in schema *db* with ``reltuples`` row estimates.
+    def _dsn_for_db(self, db: str) -> str:
+        """Return a DSN string pointing at *db* by swapping ``dbname=`` in
+        the original DSN. Used to open scratch connections for cross-db
+        introspection (``list_tables`` / ``describe_table`` / ``get_ddl``)."""
+        assert self._dsn is not None
+        import re as _re
+        # Replace existing dbname=... or append if missing
+        if _re.search(r"\bdbname=", self._dsn):
+            return _re.sub(r"\bdbname=\S+", f"dbname={db}", self._dsn)
+        return self._dsn.rstrip() + f" dbname={db}"
 
-        ``pg_class.reltuples`` is cheap (no full-scan) and sufficient for
-        the operator console.  Pass ``db`` as the schema name.
+    async def list_tables(self, db: str) -> list[Table]:
+        """Return tables and views inside Postgres database *db*.
+
+        A psycopg connection is scoped to one Postgres database, so we
+        open a short-lived scratch connection to *db* and enumerate
+        every non-system schema's tables + views inside it.  Row
+        estimates come from ``pg_class.reltuples`` (cheap, no full scan).
         """
         self._require_connection()
-        assert self._conn is not None
-        async with self._conn.cursor(row_factory=dict_row) as cur:
-            await cur.execute(
-                """
-                SELECT
-                    t.table_name,
-                    t.table_type,
-                    COALESCE(c.reltuples::bigint, -1) AS row_estimate,
-                    pg_catalog.pg_total_relation_size(c.oid)  AS size_bytes
-                FROM information_schema.tables t
-                LEFT JOIN pg_catalog.pg_class c
-                       ON c.relname = t.table_name
-                LEFT JOIN pg_catalog.pg_namespace n
-                       ON n.oid = c.relnamespace AND n.nspname = t.table_schema
-                WHERE t.table_schema = %s
-                  AND t.table_type IN ('BASE TABLE', 'VIEW')
-                ORDER BY t.table_name
-                """,
-                (db,),
-            )
-            rows = await cur.fetchall()
+        dsn = self._dsn_for_db(db)
+        async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as scratch:
+            async with scratch.cursor(row_factory=dict_row) as cur:
+                await cur.execute(
+                    """
+                    SELECT
+                        t.table_schema,
+                        t.table_name,
+                        t.table_type,
+                        COALESCE(c.reltuples::bigint, -1) AS row_estimate,
+                        pg_catalog.pg_total_relation_size(c.oid) AS size_bytes
+                    FROM information_schema.tables t
+                    LEFT JOIN pg_catalog.pg_class c
+                           ON c.relname = t.table_name
+                    LEFT JOIN pg_catalog.pg_namespace n
+                           ON n.oid = c.relnamespace AND n.nspname = t.table_schema
+                    WHERE t.table_schema NOT IN ('pg_catalog', 'information_schema')
+                      AND t.table_type IN ('BASE TABLE', 'VIEW')
+                    ORDER BY t.table_schema, t.table_name
+                    """
+                )
+                rows = await cur.fetchall()
         return [
             Table(
-                name=r["table_name"],
+                name=(
+                    r["table_name"]
+                    if r["table_schema"] == "public"
+                    else f"{r['table_schema']}.{r['table_name']}"
+                ),
                 db=db,
                 row_count=r["row_estimate"] if r["row_estimate"] >= 0 else None,
                 size_bytes=r["size_bytes"],
