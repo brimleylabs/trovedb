@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import sys
 from typing import Annotated
 
 import typer
 
 from trovedb import __version__
+
+# psycopg's async backend requires SelectorEventLoop on Windows;
+# the default ProactorEventLoop raises at connect time.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 logger = logging.getLogger(__name__)
 

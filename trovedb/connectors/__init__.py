@@ -101,3 +101,13 @@ class Connector(Protocol):
     async def get_ddl(self, kind: str, db: str, name: str) -> str:
         """Return the DDL statement that recreates object *name* of *kind* in *db*."""
         ...
+
+
+# ---------------------------------------------------------------------------
+# Eager import of bundled connectors so their @register_connector decorators
+# run at package import time. Without this the registry stays empty and
+# get_connector() raises KeyError for every driver.
+# ---------------------------------------------------------------------------
+from trovedb.connectors import sqlite as _sqlite  # noqa: E402, F401
+from trovedb.connectors import postgres as _postgres  # noqa: E402, F401
+from trovedb.connectors import mysql as _mysql  # noqa: E402, F401
