@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+*.egg
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+.tox/
+.nox/
+.cache
+.mypy_cache/
+.pyre/
+.dmypy.json
+dmypy.json
+
+# venv
+.venv/
+venv/
+ENV/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# trovedb
+*.db-journal
+*.sqlite-journal
+.trovedb_dev/
+
+# Winston worktrees that may be created when building this repo with Winston
+.worktrees/
+.benchmark-worktrees/
+.winston/
