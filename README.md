@@ -63,10 +63,37 @@ card execution. The cards (specifications) are pre-registered in
 card and links to the Winston run that produced it. The full build is
 auditable, end to end. This is the project that ships if Winston works.
 
+## Install
+
+```bash
+pip install trovedb
+```
+
+Or from source (development):
+
+```bash
+git clone https://github.com/brimleylabs/trovedb
+cd trovedb
+pip install -e ".[dev]"
+```
+
+## Usage
+
+```bash
+# Show version
+trovedb --version
+
+# Connect to a named connection from ~/.config/trovedb/connections.toml
+trovedb connect prod-pg
+
+# Show all options
+trovedb --help
+```
+
 ## Status
 
-Pre-card-1 setup. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the locked
-design decisions and [`cards/`](cards/) for the build backlog.
+Pre-MVP. Card 1 (project skeleton) complete. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for locked
+design decisions and [`cards/`](cards/) for the full build backlog.
 
 ## License
 
