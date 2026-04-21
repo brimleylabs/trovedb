@@ -28,3 +28,24 @@ def truncate(text: str, max_width: int) -> str:
     if len(text) <= max_width:
         return text
     return text[: max_width - 1] + "…"
+
+
+def format_row_count(n: int | None) -> str:
+    """Format a row count as a compact human-readable estimate.
+
+    Examples:
+        ``None`` or negative → ``""``
+        ``0``    → ``"≈0"``
+        ``42``   → ``"≈42"``
+        ``1500`` → ``"≈2k"``
+        ``78274`` → ``"≈78k"``
+        ``1_200_000`` → ``"≈1.2M"``
+    """
+    if n is None or n < 0:
+        return ""
+    if n < 1_000:
+        return f"≈{n}"
+    if n < 1_000_000:
+        k = round(n / 1_000)
+        return f"≈{k}k"
+    return f"≈{n / 1_000_000:.1f}M"
