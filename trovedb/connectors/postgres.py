@@ -179,15 +179,28 @@ class PostgresConnector:
         ``information_schema`` and ``pg_catalog``.
 
         Args:
-            db:    Schema name (e.g. ``'public'``).
-            table: Table name.
+            db:    Postgres database name.
+            table: Table name. May be schema-qualified as ``"schema.table"``;
+                   defaults to the ``public`` schema when unqualified.
         """
         self._require_connection()
-        assert self._conn is not None
-        schema = db
+        if "." in table:
+            schema, table = table.split(".", 1)
+        else:
+            schema = "public"
+        dsn = self._dsn_for_db(db)
+        async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as scratch:
+            return await self._describe_on(scratch, db, schema, table)
 
+    async def _describe_on(
+        self,
+        conn: "psycopg.AsyncConnection[Any]",
+        db: str,
+        schema: str,
+        table: str,
+    ) -> TableSchema:
         # ---- columns ---------------------------------------------------
-        async with self._conn.cursor(row_factory=dict_row) as cur:
+        async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
                 """
                 SELECT
@@ -214,7 +227,7 @@ class PostgresConnector:
         ]
 
         # ---- indexes (via pg_catalog for accuracy) ---------------------
-        async with self._conn.cursor(row_factory=dict_row) as cur:
+        async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
                 """
                 SELECT
@@ -248,7 +261,7 @@ class PostgresConnector:
         ]
 
         # ---- foreign keys ----------------------------------------------
-        async with self._conn.cursor(row_factory=dict_row) as cur:
+        async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
                 """
                 SELECT
@@ -286,11 +299,11 @@ class PostgresConnector:
         ]
 
         # ---- DDL -------------------------------------------------------
-        ddl = await self.get_ddl("table", schema, table)
+        ddl = await self._get_ddl_on(conn, "table", schema, table)
 
         return TableSchema(
             db=db,
-            table=table,
+            table=table if schema == "public" else f"{schema}.{table}",
             columns=columns,
             indexes=indexes,
             foreign_keys=foreign_keys,
@@ -524,31 +537,32 @@ class PostgresConnector:
     # ------------------------------------------------------------------
 
     async def get_ddl(self, kind: str, db: str, name: str) -> str:  # noqa: ARG002
-        """Reconstruct a syntactically valid ``CREATE TABLE`` statement from
-        ``pg_catalog``.
-
-        The output includes:
-
-        * Column definitions with ``format_type``-accurate type names,
-          ``DEFAULT``, and ``NOT NULL``.
-        * An inline ``PRIMARY KEY`` clause (if one exists).
-        * Separate ``CREATE INDEX`` statements for non-PK indexes.
-        * ``ALTER TABLE … ADD CONSTRAINT`` clauses for foreign keys.
+        """Reconstruct a syntactically valid ``CREATE TABLE`` statement.
 
         Args:
             kind: Object type hint (currently only ``'table'`` is supported).
-            db:   Schema name (e.g. ``'public'``).
-            name: Table name.
-
-        Raises:
-            :class:`KeyError`: If *name* is not found in schema *db*.
+            db:   Postgres database name.
+            name: Table name, optionally schema-qualified (``"schema.table"``);
+                  defaults to the ``public`` schema when unqualified.
         """
         self._require_connection()
-        assert self._conn is not None
-        schema = db
+        if "." in name:
+            schema, name = name.split(".", 1)
+        else:
+            schema = "public"
+        dsn = self._dsn_for_db(db)
+        async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as scratch:
+            return await self._get_ddl_on(scratch, kind, schema, name)
 
+    async def _get_ddl_on(
+        self,
+        conn: "psycopg.AsyncConnection[Any]",
+        kind: str,  # noqa: ARG002
+        schema: str,
+        name: str,
+    ) -> str:
         # ---- table OID -------------------------------------------------
-        async with self._conn.cursor(row_factory=dict_row) as cur:
+        async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
                 """
                 SELECT c.oid
@@ -564,7 +578,7 @@ class PostgresConnector:
         table_oid: int = oid_row["oid"]
 
         # ---- columns ---------------------------------------------------
-        async with self._conn.cursor(row_factory=dict_row) as cur:
+        async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
                 """
                 SELECT
@@ -585,7 +599,7 @@ class PostgresConnector:
             col_rows = await cur.fetchall()
 
         # ---- primary key columns ---------------------------------------
-        async with self._conn.cursor(row_factory=dict_row) as cur:
+        async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
                 """
                 SELECT array_agg(a.attname ORDER BY k.ord) AS pk_columns
@@ -621,7 +635,7 @@ class PostgresConnector:
         ]
 
         # ---- non-PK indexes --------------------------------------------
-        async with self._conn.cursor(row_factory=dict_row) as cur:
+        async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
                 """
                 SELECT pi.indexdef
@@ -642,7 +656,7 @@ class PostgresConnector:
             ddl_parts.append(idx_row["indexdef"] + ";")
 
         # ---- foreign keys ----------------------------------------------
-        async with self._conn.cursor(row_factory=dict_row) as cur:
+        async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
                 """
                 SELECT
