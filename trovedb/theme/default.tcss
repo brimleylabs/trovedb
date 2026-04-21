@@ -1,0 +1,28 @@
+/* trovedb default dark theme */
+
+Screen {
+    background: $background;
+    color: $text;
+}
+
+#status-bar {
+    dock: top;
+    height: 1;
+    background: $primary-darken-2;
+    color: $text;
+    padding: 0 1;
+}
+
+#main-content {
+    height: 1fr;
+    content-align: center middle;
+    color: $text-muted;
+}
+
+#hint-bar {
+    dock: bottom;
+    height: 1;
+    background: $primary-darken-2;
+    color: $text-muted;
+    padding: 0 1;
+}
