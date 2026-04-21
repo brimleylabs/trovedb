@@ -40,8 +40,8 @@ from trovedb.data import QueryHistory, get_queries_dir, is_write_query
 logger = logging.getLogger(__name__)
 
 _HINT = (
-    "Ctrl+G / F5: run  Ctrl+R: history  Ctrl+S: save  Ctrl+L: clear"
-    "  ?: help  Esc: back  q: quit"
+    "Ctrl+G / F5: run  Ctrl+D: switch db  Ctrl+R: history  Ctrl+S: save"
+    "  Ctrl+L: clear  ?: help  Esc: back  q: quit"
 )
 _RESULT_LIMIT = 1000
 
@@ -184,6 +184,72 @@ class HistorySearchModal(ModalScreen["str | None"]):
 
 
 # ---------------------------------------------------------------------------
+# Database picker modal (Ctrl+D on QueryScreen)
+# ---------------------------------------------------------------------------
+
+
+class _DatabasePickerModal(ModalScreen[str]):
+    """Small centred modal listing the server's databases.
+
+    Enter picks, Esc cancels. The currently-active DB is pre-selected.
+    """
+
+    DEFAULT_CSS = """
+    _DatabasePickerModal {
+        align: center middle;
+    }
+    _DatabasePickerModal #dbpick-dialog {
+        background: $surface;
+        border: solid $primary;
+        padding: 1 2;
+        width: 60;
+        height: auto;
+        max-height: 24;
+    }
+    _DatabasePickerModal #dbpick-title {
+        height: 1;
+        color: $text;
+    }
+    _DatabasePickerModal #dbpick-list {
+        height: 1fr;
+    }
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel", show=False)]
+
+    def __init__(self, databases: list[str], active: str) -> None:
+        super().__init__()
+        self._databases = databases
+        self._active = active
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dbpick-dialog"):
+            yield Static(
+                "Switch active database — Enter to pick, Esc to cancel",
+                id="dbpick-title",
+            )
+            yield DataTable(id="dbpick-list", cursor_type="row")
+
+    async def on_mount(self) -> None:
+        table = self.query_one("#dbpick-list", DataTable)
+        table.add_column("database", key="name", width=54)
+        active_row = 0
+        for i, name in enumerate(self._databases):
+            marker = " ← active" if name == self._active else ""
+            table.add_row(f"{name}{marker}", key=name)
+            if name == self._active:
+                active_row = i
+        table.move_cursor(row=active_row)
+        table.focus()
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        self.dismiss(str(event.row_key.value))
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+# ---------------------------------------------------------------------------
 # QueryScreen
 # ---------------------------------------------------------------------------
 
@@ -261,6 +327,7 @@ class QueryScreen(Screen[None]):
         # Copy bindings: low priority so TextArea handles 'c'/'C' when focused.
         Binding("c", "copy_cell", "Copy Cell", show=False),
         Binding("shift+c", "copy_row", "Copy Row", show=False),
+        Binding("ctrl+d", "pick_database", "DB", show=False, priority=True),
         Binding("escape", "go_back", "Back", show=False),
         Binding("q", "quit", "Quit", show=False),
     ]
@@ -272,6 +339,7 @@ class QueryScreen(Screen[None]):
         connection: Connection,
         *,
         history: QueryHistory | None = None,
+        active_db: str | None = None,
     ) -> None:
         super().__init__()
         self._profile = profile
@@ -284,6 +352,11 @@ class QueryScreen(Screen[None]):
         # History walk: oldest→newest list, current index (None = not walking)
         self._history_entries: list[tuple[int, str]] = []
         self._history_idx: int | None = None
+        # Active database for query execution. Defaults to the profile's
+        # configured database; the user can switch it with `d` to route
+        # queries through a scratch connection to any database the server
+        # exposes.
+        self._active_db: str = active_db or (profile.database or "")
 
     # ------------------------------------------------------------------
     # Compose / Mount
@@ -312,7 +385,9 @@ class QueryScreen(Screen[None]):
         self.query_one("#query-banner", Static).display = False
         self.query_one("#query-error", Static).display = False
         self.query_one("#query-loading", LoadingIndicator).display = False
-        self._update_status(f"Query — {self._profile.name}")
+        self._update_status(
+            f"Query — {self._profile.name} · db={self._active_db or '?'}"
+        )
         self.query_one("#query-editor", TextArea).focus()
         await self._reload_history()
 
@@ -395,11 +470,53 @@ class QueryScreen(Screen[None]):
                 logger.exception("ui prep failed")
 
             # Connector execute, tolerating connectors without dangerous= kw.
+            # When the active DB differs from the profile's default and the
+            # driver supports per-database scratch connections (Postgres),
+            # route the query through one so cross-database queries don't
+            # silently hit the wrong database.
             try:
-                try:
-                    result = await self._connector.execute(sql, dangerous=dangerous)
-                except TypeError:
-                    result = await self._connector.execute(sql)
+                active = self._active_db
+                use_scratch = (
+                    self._profile.driver.value == "postgres"
+                    and active
+                    and active != (self._profile.database or "")
+                    and hasattr(self._connector, "_dsn_for_db")
+                )
+                if use_scratch:
+                    import psycopg  # already a Postgres connector dep
+                    from psycopg.rows import dict_row
+                    scratch_dsn = self._connector._dsn_for_db(active)
+                    async with await psycopg.AsyncConnection.connect(
+                        scratch_dsn, autocommit=True
+                    ) as sc:
+                        if not dangerous:
+                            # honor read-only default
+                            async with sc.cursor() as guard:
+                                await guard.execute("BEGIN READ ONLY")
+                        async with sc.cursor(row_factory=dict_row) as cur:
+                            await cur.execute(sql)
+                            try:
+                                rows = await cur.fetchall()
+                            except psycopg.ProgrammingError:
+                                rows = []
+                            cols = (
+                                [d.name for d in cur.description]
+                                if cur.description
+                                else []
+                            )
+                        if not dangerous:
+                            async with sc.cursor() as guard:
+                                await guard.execute("ROLLBACK")
+                    result = ResultSet(
+                        columns=cols,
+                        rows=[tuple(r[c] for c in cols) for r in rows],
+                        row_count=len(rows),
+                    )
+                else:
+                    try:
+                        result = await self._connector.execute(sql, dangerous=dangerous)
+                    except TypeError:
+                        result = await self._connector.execute(sql)
             except Exception as exc:
                 error_str = f"{type(exc).__name__}: {exc}"
                 logger.exception("query execute failed")
@@ -518,6 +635,33 @@ class QueryScreen(Screen[None]):
             # Past the newest entry — clear the editor
             self._history_idx = None
             self.query_one("#query-editor", TextArea).load_text("")
+
+    async def action_pick_database(self) -> None:
+        """Open a small modal to switch the active database (Ctrl+D).
+
+        Queries run with the active DB. Only meaningful for Postgres (and,
+        to a lesser extent, MySQL); SQLite has a single 'main' schema so
+        this is a no-op there.
+        """
+        try:
+            dbs = await self._connector.list_databases()
+        except Exception as exc:
+            self._show_banner(f"Could not list databases: {exc}")
+            return
+        names = [d.name for d in dbs] if dbs else []
+        if not names:
+            self._show_banner("No databases reported by the connector")
+            return
+
+        def _on_pick(selected: str | None) -> None:
+            if selected and selected != self._active_db:
+                self._active_db = selected
+                self._update_status(
+                    f"Query — {self._profile.name} · db={self._active_db}"
+                )
+                self._show_banner(f"Active DB → {selected}")
+
+        self.app.push_screen(_DatabasePickerModal(names, self._active_db), _on_pick)
 
     async def action_open_history(self) -> None:
         """Open the inline history search modal (Ctrl+R)."""
