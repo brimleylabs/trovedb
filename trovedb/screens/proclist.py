@@ -287,6 +287,7 @@ class ProclistScreen(Screen[None]):
         Binding("3", "set_interval('3')", "30s", show=False),
         Binding("l", "open_locks", "Locks", show=False),
         Binding("s", "open_schema", "Schema", show=False),
+        Binding("shift+q", "open_query", "Query", show=False),
         Binding("slash", "open_filter", "Filter", show=False),
         Binding("escape", "go_back", "Back", show=False),
         Binding("q", "quit", "Quit", show=False),
@@ -709,6 +710,18 @@ class ProclistScreen(Screen[None]):
 
         self.app.push_screen(
             SchemaScreen(
+                self._profile,
+                self._connector,
+                self._connection,
+            )
+        )
+
+    def action_open_query(self) -> None:
+        """Push the SQL editor QueryScreen (Shift+Q)."""
+        from trovedb.screens.query import QueryScreen  # lazy import to avoid cycles
+
+        self.app.push_screen(
+            QueryScreen(
                 self._profile,
                 self._connector,
                 self._connection,
