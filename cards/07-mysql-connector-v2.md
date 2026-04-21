@@ -69,8 +69,10 @@ Follow the auto-loaded skills in the library (`implement-trovedb-connector`,
    - If the connection attempt itself fails, `pytest.skip(f"MySQL not
      reachable: {error}")` so CI skips cleanly.
 10. Test cases (one pytest test each):
-    - `test_connect_and_list_databases` — asserts `the trovedb MySQL test DB`
-      is in the list; system schemas are excluded.
+    - `test_connect_and_list_databases` — asserts the env-configured
+      `TROVEDB_TEST_MYSQL_DB` database is in the returned list; system
+      schemas (`mysql`, `information_schema`, `performance_schema`,
+      `sys`) are excluded.
     - `test_list_tables_and_describe` — creates a temporary table in
       a fixture, lists, describes, asserts column metadata.
     - `test_execute_select_returns_typed_rows`.

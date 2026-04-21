@@ -81,7 +81,8 @@ library) for the Protocol contract. Use the same domain types from
      instance skips cleanly rather than red-fails.
 10. Test cases (each as one `pytest` test):
     - `test_connect_and_list_databases` — connects, lists databases,
-      asserts `the trovedb Postgres test DB` is in the list.
+      asserts the env-configured `TROVEDB_TEST_PG_DB` database is in
+      the returned list.
     - `test_list_tables_and_describe` — creates a temporary table in a
       fixture, lists tables, describes it, asserts column metadata.
     - `test_execute_select_returns_typed_rows` — SELECT 1::int, 'a'::text;
