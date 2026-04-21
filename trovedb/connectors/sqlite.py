@@ -11,6 +11,7 @@ import aiosqlite
 from trovedb.config import ConnectionProfile
 from trovedb.connectors import register_connector
 from trovedb.connectors.types import (
+    BlockingChain,
     Column,
     Connection,
     Database,
@@ -203,6 +204,10 @@ class LocalSqliteConnector:
     async def kill_process(self, pid: int) -> None:
         """Raise :exc:`NotImplementedError` — SQLite has no process model."""
         raise NotImplementedError("SQLite has no process model")
+
+    async def list_blocking_chains(self) -> list[BlockingChain]:
+        """Return an empty list — SQLite has no lock-blocking concept."""
+        return []
 
     # ------------------------------------------------------------------
     # get_ddl

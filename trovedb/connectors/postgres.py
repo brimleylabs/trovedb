@@ -12,6 +12,7 @@ from psycopg.rows import dict_row
 from trovedb.config import ConnectionProfile, resolve_password
 from trovedb.connectors import register_connector
 from trovedb.connectors.types import (
+    BlockingChain,
     Column,
     Connection,
     Database,
@@ -417,6 +418,88 @@ class PostgresConnector:
             raise psycopg.OperationalError(
                 f"{fn}({pid}) returned False — pid not found or permission denied"
             )
+
+    # ------------------------------------------------------------------
+    # list_blocking_chains
+    # ------------------------------------------------------------------
+
+    async def list_blocking_chains(self) -> list[BlockingChain]:
+        """Return current lock-blocking chains from ``pg_stat_activity``.
+
+        Uses ``pg_blocking_pids()`` to identify direct (waiter → holder)
+        relationships.  ``depth`` is computed in Python by walking the
+        chain upward: ``depth=1`` means the holder is not itself waiting;
+        ``depth≥2`` means the holder is transitively blocked.
+        """
+        self._require_connection()
+        assert self._conn is not None
+        async with self._conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
+                """
+                SELECT DISTINCT ON (w.pid, b.pid)
+                    w.pid                                                   AS waiter_pid,
+                    COALESCE(w.usename, '')                                 AS waiter_user,
+                    COALESCE(w.query, '')                                   AS waiter_query,
+                    b.pid                                                   AS holder_pid,
+                    COALESCE(b.usename, '')                                 AS holder_user,
+                    COALESCE(b.query, '')                                   AS holder_query,
+                    COALESCE(l.locktype, 'unknown')                        AS lock_type,
+                    CASE
+                        WHEN l.relation IS NOT NULL
+                        THEN l.relation::regclass::text
+                        ELSE NULL
+                    END                                                     AS object_name,
+                    GREATEST(
+                        EXTRACT(EPOCH FROM (now() - w.query_start))::float,
+                        0.0
+                    )                                                       AS waited_seconds
+                FROM pg_stat_activity w
+                CROSS JOIN LATERAL unnest(pg_blocking_pids(w.pid)) AS x(blocker_pid)
+                JOIN pg_stat_activity b ON b.pid = x.blocker_pid
+                LEFT JOIN pg_locks l ON l.pid = w.pid AND NOT l.granted
+                WHERE w.pid != pg_backend_pid()
+                  AND b.pid != pg_backend_pid()
+                ORDER BY w.pid, b.pid
+                """
+            )
+            rows = await cur.fetchall()
+
+        if not rows:
+            return []
+
+        # Compute depth in Python: walk up the holder chain.
+        # depth=1 → holder is not itself a waiter (direct block).
+        # depth=N → holder is N-1 levels deep in a transitive chain.
+        waiter_set: set[int] = {r["waiter_pid"] for r in rows}
+        # waiter_pid → holder_pid mapping (first occurrence wins for chains)
+        waiter_to_holder: dict[int, int] = {}
+        for r in rows:
+            waiter_to_holder.setdefault(r["waiter_pid"], r["holder_pid"])
+
+        def _depth(holder_pid: int, seen: set[int]) -> int:
+            if holder_pid not in waiter_set or holder_pid in seen:
+                return 1
+            seen.add(holder_pid)
+            parent = waiter_to_holder.get(holder_pid)
+            if parent is None:
+                return 1
+            return 1 + _depth(parent, seen)
+
+        return [
+            BlockingChain(
+                waiter_pid=r["waiter_pid"],
+                waiter_user=r["waiter_user"],
+                waiter_query=r["waiter_query"],
+                holder_pid=r["holder_pid"],
+                holder_user=r["holder_user"],
+                holder_query=r["holder_query"],
+                lock_type=r["lock_type"],
+                object_name=r["object_name"],
+                waited_seconds=r["waited_seconds"] or 0.0,
+                depth=_depth(r["holder_pid"], {r["waiter_pid"]}),
+            )
+            for r in rows
+        ]
 
     # ------------------------------------------------------------------
     # get_ddl
