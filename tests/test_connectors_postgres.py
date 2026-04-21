@@ -1,12 +1,12 @@
-"""Integration tests for PostgresConnector against a local Postgres instance.
+"""Integration tests for PostgresConnector against a developer-provided Postgres.
 
-Connection is resolved (in priority order) from:
+Connection is resolved from env vars (in priority order):
   1. ``TROVEDB_TEST_PG_DSN`` — full DSN URL
   2. ``TROVEDB_TEST_PG_HOST / PORT / USER / PASSWORD / DB`` env vars
-  3. (none; see CONTRIBUTING) localhost, REDACTED, the trovedb Postgres test DB
 
-The entire module is skipped when Postgres is not reachable so CI
-environments without a database don't red-fail.
+If none are set or the server is unreachable, the entire module skips
+so CI environments without a database don't red-fail. See CONTRIBUTING
+for local-setup guidance.
 """
 
 from __future__ import annotations
