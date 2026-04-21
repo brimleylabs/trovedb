@@ -5,9 +5,10 @@ stack: python
 registered_at: 2026-04-21
 supersedes: 07-mysql-connector.md
 supersedes_reason: |
-  v1 specified testcontainers-python. Docker is unavailable on the
-  developer's machine. v2 uses a local MySQL 8.x instance (developer-provided)
-  read from env vars. Production code and Protocol contract unchanged.
+  v1 specified testcontainers-python. v2 swaps the test fixture for
+  a developer-provided local MySQL instance configured entirely via
+  environment variables. Production code and Protocol contract
+  unchanged from v1.
 ---
 
 # MySQL connector — operator-first
@@ -57,16 +58,16 @@ Follow the auto-loaded skills in the library (`implement-trovedb-connector`,
 8. `get_ddl("table", db, name)` runs `SHOW CREATE TABLE <db>.<name>`
    and returns the second column. MySQL exposes this directly —
    no reconstruction needed.
-9. **Tests connect to a local MySQL instance** read from env vars
-   (symmetric to Postgres):
+9. **Tests connect to a developer-provided MySQL instance** read from
+   env vars (symmetric to Postgres):
    - `TROVEDB_TEST_MYSQL_DSN` (preferred, full DSN), OR fall back to
    - `TROVEDB_TEST_MYSQL_HOST` / `TROVEDB_TEST_MYSQL_PORT` /
      `TROVEDB_TEST_MYSQL_USER` / `TROVEDB_TEST_MYSQL_PASSWORD` /
      `TROVEDB_TEST_MYSQL_DB`
-   - Default fallback values: `127.0.0.1`, `3306`, `root`, `` (empty
-     password — developer-provided), `the trovedb MySQL test DB`.
-   - If connection fails at test setup, `pytest.skip(...)` with the
-     error rather than red-failing.
+   - If none of those are set, `pytest.skip("MySQL test vars not set;
+     see CONTRIBUTING.md")`. No defaults assumed in the card.
+   - If the connection attempt itself fails, `pytest.skip(f"MySQL not
+     reachable: {error}")` so CI skips cleanly.
 10. Test cases (one pytest test each):
     - `test_connect_and_list_databases` — asserts `the trovedb MySQL test DB`
       is in the list; system schemas are excluded.
@@ -99,8 +100,6 @@ Follow the auto-loaded skills in the library (`implement-trovedb-connector`,
   Without this join, `blocked_by` would always be None.
 - `KILL QUERY` vs `KILL`: former cancels just the running statement,
   latter drops the session. Our `force` flag distinguishes.
-- The test DB `the trovedb MySQL test DB` already exists on the developer's machine
-  at `developer-provided` with env-var-configured password (developer-provided).
 - Hard card. Plan-then-execute should fire.
 
 Registered before execution (v2). Not edited after running.

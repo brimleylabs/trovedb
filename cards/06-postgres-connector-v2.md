@@ -5,9 +5,9 @@ stack: python
 registered_at: 2026-04-21
 supersedes: 06-postgres-connector.md
 supersedes_reason: |
-  v1 specified testcontainers-python; Docker was unavailable on the
-  developer's machine. v2 swaps the test fixture for a local Postgres
-  instance read from env vars. Production code and Protocol contract
+  v1 specified testcontainers-python. v2 swaps the test fixture for
+  a developer-provided local Postgres instance configured entirely
+  via environment variables. Production code and Protocol contract
   are unchanged from v1.
 ---
 
@@ -65,17 +65,20 @@ library) for the Protocol contract. Use the same domain types from
    `pg_catalog`. Include columns, types, NOT NULLs, defaults, primary
    key, indexes (separate `CREATE INDEX`), and foreign keys (separate
    `ALTER TABLE`). Output must be syntactically valid.
-9. **Tests connect to a local Postgres instance** read from env vars:
+9. **Tests connect to a developer-provided Postgres instance** read
+   from env vars:
    - `TROVEDB_TEST_PG_DSN` (preferred, full DSN URL), OR fall back to
-   - `TROVEDB_TEST_PG_HOST` / `TROVEDB_TEST_PG_PORT` / `TROVEDB_TEST_PG_USER` /
-     `TROVEDB_TEST_PG_PASSWORD` / `TROVEDB_TEST_PG_DB`
-   - Default fallback values: `localhost`, `5432`, `postgres`, `postgres`,
-     `the trovedb Postgres test DB` — so `pytest -q` Just Works on a developer machine
-     with Postgres running on the standard port and the `the trovedb Postgres test DB`
-     database created (which the project README will document).
-   - If the connection fails at test setup, the test module should
-     `pytest.skip(f"Postgres not available at {dsn}: {error}")` so CI
-     in environments without Postgres skips cleanly rather than red-fails.
+   - `TROVEDB_TEST_PG_HOST` / `TROVEDB_TEST_PG_PORT` /
+     `TROVEDB_TEST_PG_USER` / `TROVEDB_TEST_PG_PASSWORD` /
+     `TROVEDB_TEST_PG_DB`
+   - If none of those are set, the test module should
+     `pytest.skip("Postgres test vars not set; see CONTRIBUTING.md")`
+     rather than attempting any default or failing red. The project
+     CONTRIBUTING.md (not this card) documents how contributors
+     point the tests at whatever Postgres they have locally.
+   - If the connection attempt itself fails, `pytest.skip(f"Postgres
+     not reachable: {error}")` so CI in environments without a reachable
+     instance skips cleanly rather than red-fails.
 10. Test cases (each as one `pytest` test):
     - `test_connect_and_list_databases` — connects, lists databases,
       asserts `the trovedb Postgres test DB` is in the list.
@@ -114,10 +117,8 @@ library) for the Protocol contract. Use the same domain types from
 - **This is the heart of trovedb's value prop** — `list_processes()`
   and `kill_process()` are the headline features. Take the time to get
   them right.
-- The test database `the trovedb Postgres test DB` already exists on the developer's machine
-  with developer-provided credentials via env vars. The
-  test suite will reuse it; tests are responsible for creating and
-  dropping any schema they touch (use `CREATE SCHEMA test_<random>`
-  for isolation if needed).
+- Test isolation: tests are responsible for creating and dropping any
+  schema they touch (use `CREATE SCHEMA test_<random>` so a shared DB
+  stays clean).
 
 Registered before execution (v2). Not edited after running.
