@@ -3,9 +3,20 @@ card_id: trovedb-06-postgres-connector
 difficulty: hard
 stack: python
 registered_at: 2026-04-21
+status: superseded
+superseded_by: 06-postgres-connector-v2.md
+superseded_reason: |
+  Original card specified `testcontainers-python` for the test suite,
+  which requires Docker on the host. Docker was not available on the
+  developer's machine at execution time; rather than alter the test approach
+  in-place after registration, the card was superseded by v2 which
+  uses a local Postgres instance (default `localhost`, `postgres`
+  user) with credentials read from env vars. Test contract is the same;
+  only the test fixture differs. v1 remains in the repo as the locked
+  pre-registered text.
 ---
 
-# Postgres connector — operator-first
+# Postgres connector — operator-first  (SUPERSEDED — see v2)
 
 ## Goal
 
