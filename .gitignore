@@ -56,3 +56,5 @@ Thumbs.db
 .worktrees/
 .benchmark-worktrees/
 .winston/
+.claude/skills/
+.claude/settings.local.json
