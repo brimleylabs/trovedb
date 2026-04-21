@@ -29,18 +29,30 @@ from trovedb.connectors.types import Database, Process, ResultSet, Table, TableS
 
 # ---------------------------------------------------------------------------
 # DSN resolution helpers
+#
+# Reads config entirely from env vars — no hardcoded defaults. If nothing
+# is configured, the whole module is skipped. See CONTRIBUTING for how to
+# point the tests at your local Postgres.
 # ---------------------------------------------------------------------------
+
+_DSN_ENV = os.environ.get("TROVEDB_TEST_PG_DSN")
+_HOST = os.environ.get("TROVEDB_TEST_PG_HOST")
+_PORT = os.environ.get("TROVEDB_TEST_PG_PORT")
+_USER = os.environ.get("TROVEDB_TEST_PG_USER")
+_PASSWORD = os.environ.get("TROVEDB_TEST_PG_PASSWORD", "")
+_DB = os.environ.get("TROVEDB_TEST_PG_DB")
+
+if not _DSN_ENV and not (_HOST and _PORT and _USER and _DB):
+    pytest.skip(
+        "TROVEDB_TEST_PG_* env vars not set — see CONTRIBUTING.md for setup",
+        allow_module_level=True,
+    )
 
 
 def _build_test_dsn() -> str:
-    if dsn := os.environ.get("TROVEDB_TEST_PG_DSN"):
-        return dsn
-    host = os.environ.get("TROVEDB_TEST_PG_HOST", "localhost")
-    port = os.environ.get("TROVEDB_TEST_PG_PORT", "5432")
-    user = os.environ.get("TROVEDB_TEST_PG_USER", "postgres")
-    password = os.environ.get("TROVEDB_TEST_PG_PASSWORD", "postgres")
-    db = os.environ.get("TROVEDB_TEST_PG_DB", "the trovedb Postgres test DB")
-    return f"postgresql://{user}:{password}@{host}:{port}/{db}"
+    if _DSN_ENV:
+        return _DSN_ENV
+    return f"postgresql://{_USER}:{_PASSWORD}@{_HOST}:{_PORT}/{_DB}"
 
 
 _TEST_DSN = _build_test_dsn()
@@ -119,8 +131,7 @@ async def test_connect_and_list_databases(connector: PostgresConnector) -> None:
     assert isinstance(dbs, list)
     assert all(isinstance(d, Database) for d in dbs)
     db_names = {d.name for d in dbs}
-    expected = os.environ.get("TROVEDB_TEST_PG_DB", "the trovedb Postgres test DB")
-    assert expected in db_names, f"{expected!r} not found in {db_names}"
+    assert _DB in db_names, f"{_DB!r} not found in {db_names}"
 
 
 # ---------------------------------------------------------------------------

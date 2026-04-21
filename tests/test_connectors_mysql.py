@@ -1,12 +1,12 @@
-"""Integration tests for MysqlConnector against a local MySQL instance.
+"""Integration tests for MysqlConnector against a developer-provided MySQL.
 
-Connection is resolved (in priority order) from:
+Connection is resolved from env vars (in priority order):
   1. ``TROVEDB_TEST_MYSQL_DSN`` — full DSN URL
   2. ``TROVEDB_TEST_MYSQL_HOST / PORT / USER / PASSWORD / DB`` env vars
-  3. (none; see CONTRIBUTING) localhost, REDACTED, the MySQL test DB
 
-The entire module is skipped when MySQL is not reachable so CI
-environments without a database don't red-fail.
+If none are set or the server is unreachable, the entire module is
+skipped so CI environments without a database don't red-fail. See
+CONTRIBUTING for local-setup guidance.
 """
 
 from __future__ import annotations
@@ -28,18 +28,31 @@ from trovedb.connectors.types import Database, Process, ResultSet, Table, TableS
 
 # ---------------------------------------------------------------------------
 # DSN resolution helpers
+#
+# Reads config entirely from env vars — no hardcoded defaults. If nothing
+# is configured, the whole module is skipped. See CONTRIBUTING for how to
+# point the tests at your local MySQL.
 # ---------------------------------------------------------------------------
 
-_HOST = os.environ.get("TROVEDB_TEST_MYSQL_HOST", "127.0.0.1")
-_PORT = int(os.environ.get("TROVEDB_TEST_MYSQL_PORT", "3306"))
-_USER = os.environ.get("TROVEDB_TEST_MYSQL_USER", "root")
+_DSN_ENV = os.environ.get("TROVEDB_TEST_MYSQL_DSN")
+_HOST = os.environ.get("TROVEDB_TEST_MYSQL_HOST")
+_PORT_STR = os.environ.get("TROVEDB_TEST_MYSQL_PORT")
+_USER = os.environ.get("TROVEDB_TEST_MYSQL_USER")
 _PASSWORD = os.environ.get("TROVEDB_TEST_MYSQL_PASSWORD", "")
-_DB = os.environ.get("TROVEDB_TEST_MYSQL_DB", "the MySQL test DB")
+_DB = os.environ.get("TROVEDB_TEST_MYSQL_DB")
+
+if not _DSN_ENV and not (_HOST and _PORT_STR and _USER and _DB):
+    pytest.skip(
+        "TROVEDB_TEST_MYSQL_* env vars not set — see CONTRIBUTING.md for setup",
+        allow_module_level=True,
+    )
+
+_PORT = int(_PORT_STR) if _PORT_STR else 0
 
 
 def _build_test_dsn() -> str:
-    if dsn := os.environ.get("TROVEDB_TEST_MYSQL_DSN"):
-        return dsn
+    if _DSN_ENV:
+        return _DSN_ENV
     return f"mysql://{_USER}:{_PASSWORD}@{_HOST}:{_PORT}/{_DB}"
 
 
