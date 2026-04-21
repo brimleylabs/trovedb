@@ -94,8 +94,13 @@ class Connector(Protocol):
         """Return the active server processes / sessions."""
         ...
 
-    async def kill_process(self, pid: int) -> None:
-        """Terminate the server process identified by *pid*."""
+    async def kill_process(self, pid: int, force: bool = False) -> None:
+        """Cancel or terminate the server process identified by *pid*.
+
+        When *force* is ``False`` (default) the query is cancelled but
+        the session remains alive.  When *force* is ``True`` the session
+        connection is dropped entirely.
+        """
         ...
 
     async def get_ddl(self, kind: str, db: str, name: str) -> str:
@@ -108,6 +113,6 @@ class Connector(Protocol):
 # run at package import time. Without this the registry stays empty and
 # get_connector() raises KeyError for every driver.
 # ---------------------------------------------------------------------------
-from trovedb.connectors import sqlite as _sqlite  # noqa: E402, F401
-from trovedb.connectors import postgres as _postgres  # noqa: E402, F401
 from trovedb.connectors import mysql as _mysql  # noqa: E402, F401
+from trovedb.connectors import postgres as _postgres  # noqa: E402, F401
+from trovedb.connectors import sqlite as _sqlite  # noqa: E402, F401
