@@ -31,7 +31,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import ModalScreen, Screen
-from textual.widgets import DataTable, Input, LoadingIndicator, Static, TextArea
+from textual.widgets import Button, DataTable, Input, LoadingIndicator, Static, TextArea
 
 from trovedb.config import ConnectionProfile
 from trovedb.connectors.types import Connection, ResultSet
@@ -210,6 +210,11 @@ class QueryScreen(Screen[None]):
         height: 40%;
         border-bottom: solid $primary;
     }
+    QueryScreen #query-run {
+        height: 3;
+        width: 100%;
+        margin: 0;
+    }
     QueryScreen #query-result-area {
         height: 1fr;
     }
@@ -288,6 +293,7 @@ class QueryScreen(Screen[None]):
         yield Static("", id="query-status")
         yield Static("", id="query-banner")
         yield TextArea(language="sql", id="query-editor")
+        yield Button("▶ Run (Ctrl+G)", id="query-run", variant="success")
         with Vertical(id="query-result-area"):
             yield Static("", id="query-error")
             yield DataTable(
@@ -296,6 +302,11 @@ class QueryScreen(Screen[None]):
             yield LoadingIndicator(id="query-loading")
             yield Static("", id="query-result-status")
         yield Static(_HINT, id="query-hint")
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Clickable fallback when terminal swallows F5/Ctrl+Enter/etc."""
+        if event.button.id == "query-run":
+            await self.action_execute_query()
 
     async def on_mount(self) -> None:
         self.query_one("#query-banner", Static).display = False
