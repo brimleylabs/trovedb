@@ -79,6 +79,8 @@ class Process:
     info: str | None = None
     time_seconds: float | None = None
     host: str | None = None
+    wait_event: str | None = None
+    blocked_by: int | None = None
 
 
 @dataclass
