@@ -40,7 +40,7 @@ from trovedb.data import QueryHistory, get_queries_dir, is_write_query
 logger = logging.getLogger(__name__)
 
 _HINT = (
-    "F5: run  Ctrl+R: history  Ctrl+S: save  Ctrl+L: clear"
+    "Ctrl+G / F5: run  Ctrl+R: history  Ctrl+S: save  Ctrl+L: clear"
     "  ?: help  Esc: back  q: quit"
 )
 _RESULT_LIMIT = 1000
@@ -242,6 +242,11 @@ class QueryScreen(Screen[None]):
     BINDINGS = [
         Binding("f5", "execute_query", "Run", show=False, priority=True),
         Binding("ctrl+enter", "execute_query", "Run", show=False, priority=True),
+        # Mintty / Git Bash delivers Ctrl+Enter as Ctrl+J; some terminals
+        # swallow F5 entirely. Provide reliable fallbacks.
+        Binding("ctrl+j", "execute_query", "Run", show=False, priority=True),
+        Binding("ctrl+g", "execute_query", "Run", show=False, priority=True),
+        Binding("alt+enter", "execute_query", "Run", show=False, priority=True),
         Binding("ctrl+r", "open_history", "History", show=False, priority=True),
         Binding("ctrl+s", "save_query", "Save", show=False, priority=True),
         Binding("ctrl+l", "clear_editor", "Clear", show=False, priority=True),
