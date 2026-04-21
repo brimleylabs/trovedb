@@ -3,9 +3,16 @@ card_id: trovedb-07-mysql-connector
 difficulty: hard
 stack: python
 registered_at: 2026-04-21
+status: superseded
+superseded_by: 07-mysql-connector-v2.md
+superseded_reason: |
+  Same situation as card 6: original specified `testcontainers-python`
+  which needs Docker, and Docker isn't available on the developer's machine.
+  v2 swaps to a local MySQL instance (developer-provided) read from env
+  vars. Production code and Protocol contract unchanged.
 ---
 
-# MySQL connector — operator-first
+# MySQL connector — operator-first  (SUPERSEDED — see v2)
 
 ## Goal
 
