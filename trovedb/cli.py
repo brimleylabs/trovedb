@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 app = typer.Typer(
     name="trovedb",
     help="A live operator console for SQL databases.",
-    no_args_is_help=True,
+    invoke_without_command=True,
 )
 
 
@@ -26,6 +26,7 @@ def _version_callback(value: bool) -> None:  # noqa: FBT001
 
 @app.callback()
 def main(
+    ctx: typer.Context,
     version: Annotated[
         bool | None,
         typer.Option(
@@ -38,6 +39,10 @@ def main(
     ] = None,
 ) -> None:
     """trovedb — live operator console for SQL databases."""
+    if ctx.invoked_subcommand is None:
+        from trovedb.app import TroveApp
+
+        TroveApp().run()
 
 
 @app.command()
