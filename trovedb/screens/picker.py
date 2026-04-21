@@ -58,10 +58,16 @@ class ConnectionPickerScreen(Screen[None]):
         Binding("q", "quit_app", "Quit", show=False),
     ]
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        initial_name: str | None = None,
+        initial_url: str | None = None,
+    ) -> None:
         super().__init__()
         self._profiles: dict[str, ConnectionProfile] = {}
         self._profile_names: list[str] = []
+        self._initial_name = initial_name
+        self._initial_url = initial_url
 
     def compose(self) -> ComposeResult:
         yield Static("trovedb — select a connection", id="picker-status")
@@ -106,6 +112,19 @@ class ConnectionPickerScreen(Screen[None]):
                 table.add_row(name, driver, host, key=name)
         else:
             table.display = False
+
+        if self._initial_name is not None:
+            profile = self._profiles.get(self._initial_name)
+            if profile is None:
+                self.query_one("#picker-status", Static).update(
+                    f"trovedb — no profile named {self._initial_name!r} in config"
+                )
+            else:
+                self.run_worker(self._connect(profile), exclusive=True)
+        elif self._initial_url is not None:
+            self.query_one("#picker-status", Static).update(
+                "trovedb — positional DSN not yet supported; pick a saved profile"
+            )
 
     def on_data_table_row_selected(
         self, event: DataTable.RowSelected

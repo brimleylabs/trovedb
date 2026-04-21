@@ -54,6 +54,15 @@ class TroveApp(App[None]):
         Binding("q", "quit", "Quit", show=False),
     ]
 
+    def __init__(
+        self,
+        conn_name: str | None = None,
+        conn_url: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._conn_name = conn_name
+        self._conn_url = conn_url
+
     def compose(self) -> ComposeResult:
         yield Static(
             f"trovedb {__version__} \u2014 (no connection)",
@@ -63,10 +72,20 @@ class TroveApp(App[None]):
         yield Static("?: help  q: quit", id="hint-bar")
 
     def on_mount(self) -> None:
-        """Push the connection picker on startup."""
+        """Push the connection picker on startup.
+
+        ``--conn NAME`` and positional DSN skip the picker and connect
+        directly; those are handled by the picker screen's
+        ``initial_name`` / ``initial_url`` kwargs.
+        """
         from trovedb.screens.picker import ConnectionPickerScreen  # lazy to avoid cycles
 
-        self.push_screen(ConnectionPickerScreen())
+        self.push_screen(
+            ConnectionPickerScreen(
+                initial_name=self._conn_name,
+                initial_url=self._conn_url,
+            )
+        )
 
     def action_toggle_help(self) -> None:
         """Open the help overlay."""
