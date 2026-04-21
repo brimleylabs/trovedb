@@ -37,25 +37,33 @@ def main(
             help="Show version and exit.",
         ),
     ] = None,
+    conn: Annotated[
+        str | None,
+        typer.Option(
+            "--conn",
+            help=(
+                "Named connection profile from "
+                "~/.config/trovedb/connections.toml. "
+                "Skips the picker and connects directly."
+            ),
+        ),
+    ] = None,
+    conn_url: Annotated[
+        str | None,
+        typer.Argument(
+            help=(
+                "Ad-hoc DSN URL (e.g. postgres://user@localhost/db). "
+                "Skips the picker and connects directly."
+            ),
+            metavar="URL",
+        ),
+    ] = None,
 ) -> None:
-    """trovedb — live operator console for SQL databases."""
+    """trovedb \u2014 live operator console for SQL databases."""
     if ctx.invoked_subcommand is None:
         from trovedb.app import TroveApp
 
-        TroveApp().run()
-
-
-@app.command()
-def connect(
-    connection: Annotated[
-        str | None,
-        typer.Argument(help="Connection name from ~/.config/trovedb/connections.toml"),
-    ] = None,
-) -> None:
-    """Connect to a database and open the operator console."""
-    logger.info("connect called with connection=%s", connection)
-    typer.echo("connect: not yet implemented")
-    raise typer.Exit(1)
+        TroveApp(conn_name=conn, conn_url=conn_url).run()
 
 
 if __name__ == "__main__":
