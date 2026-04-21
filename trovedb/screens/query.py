@@ -342,12 +342,30 @@ class QueryScreen(Screen[None]):
         read (useful when TextArea reactive state hasn't propagated yet in the
         test harness).  Production code always leaves it as ``None``.
         """
+        # Diagnostic banner so the user can SEE what step we reached.
+        # Written to the query-banner area which is visible at the top.
+        def _trace(msg: str) -> None:
+            try:
+                banner = self.query_one("#query-banner", Static)
+                banner.display = True
+                banner.update(f"[trace] {msg}")
+            except Exception:
+                pass
+
+        _trace("action_execute_query fired")
         if self._running:
-            return
+            # Don't wedge the screen forever if a prior call crashed before
+            # it could clear the flag — just log and proceed.
+            logger.warning("Query screen _running flag was stuck; resetting")
+            _trace("stuck flag detected — clearing and continuing")
+            self._running = False
         sql = _sql if _sql is not None else self.query_one("#query-editor", TextArea).text.strip()
+        _trace(f"sql length={len(sql)}")
         if not sql:
+            _trace("empty sql — returning")
             return
         if is_write_query(sql):
+            _trace("detected write query — opening confirm modal")
             def _on_confirm(confirmed: bool) -> None:
                 if confirmed:
                     self.run_worker(
@@ -356,53 +374,78 @@ class QueryScreen(Screen[None]):
 
             self.app.push_screen(WriteConfirmModal(), _on_confirm)
             return
+        _trace("calling _do_execute…")
         await self._do_execute(sql, dangerous=False)
+        _trace("_do_execute returned")
 
     async def _do_execute(self, sql: str, *, dangerous: bool = False) -> None:
         """Run *sql* against the connector and populate the result grid."""
         self._running = True
-        self._show_loading(True)
-        self._hide_error()
-
         start = time.monotonic()
         error_str: str | None = None
         result: ResultSet | None = None
 
         try:
-            # Try the dangerous= kwarg path first; fall back if not supported
-            # (e.g. SQLite connector which has no read-only guard).
+            # UI prep — wrap separately so a widget-update crash can't leave
+            # self._running pinned True and the screen unusable.
             try:
-                result = await self._connector.execute(sql, dangerous=dangerous)
-            except TypeError:
-                result = await self._connector.execute(sql)
-        except Exception as exc:
-            error_str = str(exc)
-            logger.exception("query execute failed")
+                self._show_loading(True)
+                self._hide_error()
+            except Exception:
+                logger.exception("ui prep failed")
 
-        duration_ms = int((time.monotonic() - start) * 1000)
+            # Connector execute, tolerating connectors without dangerous= kw.
+            try:
+                try:
+                    result = await self._connector.execute(sql, dangerous=dangerous)
+                except TypeError:
+                    result = await self._connector.execute(sql)
+            except Exception as exc:
+                error_str = f"{type(exc).__name__}: {exc}"
+                logger.exception("query execute failed")
 
-        # Record to history (success or failure)
-        try:
-            await self._history.record(
-                profile=self._profile.name,
-                sql=sql,
-                duration_ms=duration_ms if error_str is None else None,
-                error=error_str,
-            )
-            await self._reload_history()
-        except Exception as exc:
-            logger.warning("Failed to record history: %s", exc)
+            duration_ms = int((time.monotonic() - start) * 1000)
 
-        self._show_loading(False)
-        self._running = False
+            # Record to history (success or failure) — never fatal.
+            try:
+                await self._history.record(
+                    profile=self._profile.name,
+                    sql=sql,
+                    duration_ms=duration_ms if error_str is None else None,
+                    error=error_str,
+                )
+                await self._reload_history()
+            except Exception as exc:
+                logger.warning("Failed to record history: %s", exc)
 
-        if error_str is not None:
-            self._show_error(f"ERROR: {error_str}")
-            self._update_result_status("")
-        else:
-            assert result is not None
-            self._last_result = result
-            self._render_results(result)
+            if error_str is not None:
+                try:
+                    self._show_error(f"ERROR: {error_str}")
+                    self._update_result_status("")
+                except Exception:
+                    logger.exception("error-panel render failed")
+            else:
+                try:
+                    assert result is not None
+                    self._last_result = result
+                    self._render_results(result)
+                except Exception as exc:
+                    logger.exception("result render failed")
+                    # Surface render failures in the UI too — otherwise the
+                    # user sees nothing and assumes the run did nothing.
+                    try:
+                        self._show_error(
+                            f"ERROR rendering result: {type(exc).__name__}: {exc}"
+                        )
+                    except Exception:
+                        pass
+        finally:
+            # _running MUST reset no matter what, or the screen jams forever.
+            self._running = False
+            try:
+                self._show_loading(False)
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Result rendering
