@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 _HINT = (
     "W: watch  R: refresh  K: kill  E: explain  C: copy"
-    "  L: locks  S: schema  Shift+Q: query  /: filter  ?: help  Esc: back  q: quit"
+    "  L: locks  S: schema  :: query  /: filter  ?: help  Esc: back  q: quit"
 )
 
 # Interval shortcut key → seconds.
@@ -287,7 +287,7 @@ class ProclistScreen(Screen[None]):
         Binding("3", "set_interval('3')", "30s", show=False),
         Binding("l", "open_locks", "Locks", show=False),
         Binding("s", "open_schema", "Schema", show=False),
-        Binding("shift+q", "open_query", "Query", show=False),
+        Binding("colon", "open_query", "Query", show=False),
         Binding("slash", "open_filter", "Filter", show=False),
         Binding("escape", "go_back", "Back", show=False),
         Binding("q", "quit", "Quit", show=False),
@@ -717,7 +717,7 @@ class ProclistScreen(Screen[None]):
         )
 
     def action_open_query(self) -> None:
-        """Push the SQL editor QueryScreen (Shift+Q)."""
+        """Push the SQL editor QueryScreen (`:` hotkey)."""
         from trovedb.screens.query import QueryScreen  # lazy import to avoid cycles
 
         self.app.push_screen(

@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 _HINT = (
     "Enter: select  /: filter  D: copy DDL  R: refresh  Shift+R: full refresh"
-    "  Shift+Q: query  ?: help  Esc: back  q: quit"
+    "  :: query  ?: help  Esc: back  q: quit"
 )
 
 
@@ -130,6 +130,7 @@ class SchemaScreen(Screen[None]):
         Binding("r", "refresh_node", "Refresh", show=False),
         Binding("shift+r", "refresh_all", "Full Refresh", show=False),
         Binding("d", "copy_ddl", "Copy DDL", show=False),
+        Binding("colon", "open_query", "Query", show=False),
         Binding("slash", "open_filter", "Filter", show=False),
         Binding("escape", "go_back", "Back", show=False),
         Binding("q", "quit", "Quit", show=False),
@@ -480,6 +481,18 @@ class SchemaScreen(Screen[None]):
         fi = self.query_one("#schema-filter", Input)
         fi.display = True
         fi.focus()
+
+    def action_open_query(self) -> None:
+        """Push the SQL editor QueryScreen (`:` hotkey)."""
+        from trovedb.screens.query import QueryScreen  # lazy import to avoid cycles
+
+        self.app.push_screen(
+            QueryScreen(
+                self._profile,
+                self._connector,
+                self._connection,
+            )
+        )
 
     def action_go_back(self) -> None:
         """Close filter if open; shift focus to tree if detail is focused; else dismiss."""
