@@ -16,12 +16,14 @@ from textual.widgets import DataTable, Input, Static, TextArea
 
 from trovedb.config import ConnectionProfile
 from trovedb.connectors.types import Connection, Process
+from trovedb.widgets._format import format_runtime as _fmt_runtime
+from trovedb.widgets._format import truncate as _truncate
 
 logger = logging.getLogger(__name__)
 
 _HINT = (
     "W: watch  R: refresh  K: kill  E: explain  C: copy"
-    "  /: filter  Esc: back  q: quit"
+    "  L: locks  /: filter  Esc: back  q: quit"
 )
 
 # Interval shortcut key → seconds.
@@ -47,28 +49,19 @@ _QUERY_TRUNC = 55  # chars shown in the table cell
 def format_runtime(seconds: float | None) -> str:
     """Return a human-readable elapsed-time string.
 
-    Examples:
-        ``None``  → ``"—"``
-        ``2.4``   → ``"2.4s"``
-        ``61``    → ``"1m 01s"``
-        ``3720``  → ``"1h 02m"``
+    Delegates to :func:`trovedb.widgets._format.format_runtime`.
+    Kept here for backward compatibility with existing imports.
     """
-    if seconds is None:
-        return "—"
-    if seconds < 60:
-        return f"{seconds:.1f}s"
-    minutes, secs = divmod(int(seconds), 60)
-    if minutes < 60:
-        return f"{minutes}m {secs:02d}s"
-    hours, mins = divmod(minutes, 60)
-    return f"{hours}h {mins:02d}m"
+    return _fmt_runtime(seconds)
 
 
 def truncate(text: str, max_width: int) -> str:
-    """Truncate *text* to *max_width* chars, appending ``…`` if needed."""
-    if len(text) <= max_width:
-        return text
-    return text[: max_width - 1] + "…"
+    """Truncate *text* to *max_width* chars, appending ``…`` if needed.
+
+    Delegates to :func:`trovedb.widgets._format.truncate`.
+    Kept here for backward compatibility with existing imports.
+    """
+    return _truncate(text, max_width)
 
 
 def _host_label(profile: ConnectionProfile) -> str:
@@ -292,6 +285,7 @@ class ProclistScreen(Screen[None]):
         Binding("5", "set_interval('5')", "5s", show=False),
         Binding("1", "set_interval('1')", "10s", show=False),
         Binding("3", "set_interval('3')", "30s", show=False),
+        Binding("l", "open_locks", "Locks", show=False),
         Binding("slash", "open_filter", "Filter", show=False),
         Binding("escape", "go_back", "Back", show=False),
         Binding("q", "quit", "Quit", show=False),
@@ -695,6 +689,18 @@ class ProclistScreen(Screen[None]):
             self._render_table()
         else:
             self.dismiss()
+
+    def action_open_locks(self) -> None:
+        """Push the blocking-chain LocksScreen (L)."""
+        from trovedb.screens.locks import LocksScreen  # lazy import to avoid cycles
+
+        self.app.push_screen(
+            LocksScreen(
+                self._profile,
+                self._connector,
+                self._connection,
+            )
+        )
 
     def action_quit(self) -> None:
         """Quit the application."""

@@ -154,6 +154,22 @@ async def test_connect_prefers_url_over_database(db_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# list_blocking_chains (card 11)
+# ---------------------------------------------------------------------------
+
+
+async def test_sqlite_list_blocking_chains_returns_empty(
+    connector: LocalSqliteConnector,
+) -> None:
+    """SQLite has no blocking model — list_blocking_chains() must return []."""
+    from trovedb.connectors.types import BlockingChain
+
+    chains = await connector.list_blocking_chains()
+    assert chains == []
+    assert all(isinstance(c, BlockingChain) for c in chains)  # trivially true
+
+
+# ---------------------------------------------------------------------------
 # list_databases()
 # ---------------------------------------------------------------------------
 

@@ -8,6 +8,7 @@ from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from trovedb.config import ConnectionProfile
 from trovedb.connectors.types import (
+    BlockingChain,
     Connection,
     Database,
     Process,
@@ -105,6 +106,17 @@ class Connector(Protocol):
 
     async def get_ddl(self, kind: str, db: str, name: str) -> str:
         """Return the DDL statement that recreates object *name* of *kind* in *db*."""
+        ...
+
+    async def list_blocking_chains(self) -> list[BlockingChain]:
+        """Return the current lock-blocking chains.
+
+        Each :class:`~trovedb.connectors.types.BlockingChain` describes one
+        (holder → waiter) relationship.  ``depth=1`` means a direct block;
+        ``depth≥2`` means the holder is itself a waiter (transitive chain).
+
+        Connectors that have no blocking concept (SQLite) return ``[]``.
+        """
         ...
 
 

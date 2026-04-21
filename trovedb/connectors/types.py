@@ -101,3 +101,24 @@ class Connection:
     dsn: str | None = None
     connected: bool = False
     backend_pid: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BlockingChain:
+    """A single (holder → waiter) pair in a lock-blocking chain.
+
+    ``depth=1`` means the waiter is directly blocked: the holder is not
+    itself waiting on any lock.  ``depth≥2`` means the relationship is
+    transitive — the holder is itself a waiter further up the chain.
+    """
+
+    waiter_pid: int
+    waiter_user: str
+    waiter_query: str
+    holder_pid: int
+    holder_user: str
+    holder_query: str
+    lock_type: str  # e.g. "ROW", "TABLE", "ADVISORY", "relation", …
+    object_name: str | None  # e.g. "public.trips" or None for advisory
+    waited_seconds: float
+    depth: int  # 1 for direct block, >1 for transitive

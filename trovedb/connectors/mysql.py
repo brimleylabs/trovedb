@@ -12,6 +12,7 @@ import aiomysql
 from trovedb.config import ConnectionProfile, resolve_password
 from trovedb.connectors import register_connector
 from trovedb.connectors.types import (
+    BlockingChain,
     Column,
     Connection,
     Database,
@@ -47,6 +48,7 @@ class MysqlConnector:
     def __init__(self) -> None:
         self._conn: aiomysql.Connection | None = None
         self._dsn: str | None = None
+        self._mysql_major_version: int = 8  # detected at connect time
 
     # ------------------------------------------------------------------
     # connect
@@ -95,6 +97,21 @@ class MysqlConnector:
             autocommit=True,
             charset="utf8mb4",
         )
+
+        # Detect MySQL major version once at connect time so list_blocking_chains
+        # can branch between the 8.0+ and 5.7 lock-wait schemas.
+        try:
+            async with self._conn.cursor() as _ver_cur:
+                await _ver_cur.execute("SELECT VERSION()")
+                ver_row = await _ver_cur.fetchone()
+            version_str: str = ver_row[0] if ver_row else "8.0.0"
+            self._mysql_major_version = int(version_str.split(".")[0])
+        except Exception as exc:
+            logger.warning(
+                "Could not detect MySQL version, defaulting to 8: %s", exc
+            )
+            self._mysql_major_version = 8
+
         return Connection(driver="mysql", dsn=dsn, connected=True)
 
     # ------------------------------------------------------------------
@@ -436,6 +453,133 @@ class MysqlConnector:
         kill_sql = f"KILL {'QUERY ' if not force else ''}{pid}"
         async with self._conn.cursor() as cur:
             await cur.execute(kill_sql)
+
+    # ------------------------------------------------------------------
+    # list_blocking_chains
+    # ------------------------------------------------------------------
+
+    async def list_blocking_chains(self) -> list[BlockingChain]:
+        """Return current lock-blocking chains.
+
+        Branches automatically on the MySQL major version detected at
+        :meth:`connect` time:
+
+        * **8.0+**: joins ``performance_schema.data_lock_waits`` and
+          ``performance_schema.data_locks``.
+        * **5.7**: falls back to deprecated
+          ``INFORMATION_SCHEMA.INNODB_LOCK_WAITS`` and
+          ``INNODB_LOCKS``.
+
+        ``depth`` is computed in Python by walking the chain upward;
+        see :meth:`trovedb.connectors.postgres.PostgresConnector.list_blocking_chains`
+        for the algorithm.
+        """
+        self._require_connection()
+        assert self._conn is not None
+
+        if self._mysql_major_version >= 8:
+            rows = await self._list_blocking_chains_8()
+        else:
+            rows = await self._list_blocking_chains_57()
+
+        if not rows:
+            return []
+
+        # Compute depth (same algorithm as the Postgres connector).
+        waiter_set: set[int] = {r["waiter_pid"] for r in rows}
+        waiter_to_holder: dict[int, int] = {}
+        for r in rows:
+            waiter_to_holder.setdefault(r["waiter_pid"], r["holder_pid"])
+
+        def _depth(holder_pid: int, seen: set[int]) -> int:
+            if holder_pid not in waiter_set or holder_pid in seen:
+                return 1
+            seen.add(holder_pid)
+            parent = waiter_to_holder.get(holder_pid)
+            if parent is None:
+                return 1
+            return 1 + _depth(parent, seen)
+
+        return [
+            BlockingChain(
+                waiter_pid=r["waiter_pid"],
+                waiter_user=r["waiter_user"],
+                waiter_query=r["waiter_query"],
+                holder_pid=r["holder_pid"],
+                holder_user=r["holder_user"],
+                holder_query=r["holder_query"],
+                lock_type=r["lock_type"],
+                object_name=r["object_name"],
+                waited_seconds=float(r["waited_seconds"]) if r["waited_seconds"] else 0.0,
+                depth=_depth(r["holder_pid"], {r["waiter_pid"]}),
+            )
+            for r in rows
+        ]
+
+    async def _list_blocking_chains_8(self) -> list[dict]:
+        """MySQL 8.0+ path — uses ``performance_schema.data_lock_waits``."""
+        assert self._conn is not None
+        async with self._conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                """
+                SELECT
+                    wt.trx_mysql_thread_id          AS waiter_pid,
+                    p_wait.USER                     AS waiter_user,
+                    COALESCE(p_wait.INFO, '')       AS waiter_query,
+                    bt.trx_mysql_thread_id          AS holder_pid,
+                    p_block.USER                    AS holder_user,
+                    COALESCE(p_block.INFO, '')      AS holder_query,
+                    dl.LOCK_TYPE                    AS lock_type,
+                    CONCAT(dl.OBJECT_SCHEMA, '.', dl.OBJECT_NAME) AS object_name,
+                    COALESCE(p_wait.TIME, 0)        AS waited_seconds
+                FROM performance_schema.data_lock_waits dlw
+                JOIN information_schema.INNODB_TRX wt
+                    ON wt.trx_id = dlw.REQUESTING_ENGINE_TRANSACTION_ID
+                JOIN information_schema.INNODB_TRX bt
+                    ON bt.trx_id = dlw.BLOCKING_ENGINE_TRANSACTION_ID
+                JOIN information_schema.PROCESSLIST p_wait
+                    ON p_wait.ID = wt.trx_mysql_thread_id
+                JOIN information_schema.PROCESSLIST p_block
+                    ON p_block.ID = bt.trx_mysql_thread_id
+                JOIN performance_schema.data_locks dl
+                    ON dl.ENGINE_TRANSACTION_ID = dlw.REQUESTING_ENGINE_TRANSACTION_ID
+                   AND dl.LOCK_STATUS = 'WAITING'
+                WHERE p_wait.ID != CONNECTION_ID()
+                  AND p_block.ID != CONNECTION_ID()
+                """
+            )
+            return await cur.fetchall()  # type: ignore[return-value]
+
+    async def _list_blocking_chains_57(self) -> list[dict]:
+        """MySQL 5.7 path — uses deprecated ``INNODB_LOCK_WAITS``."""
+        assert self._conn is not None
+        async with self._conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                """
+                SELECT
+                    wt.trx_mysql_thread_id          AS waiter_pid,
+                    p_wait.USER                     AS waiter_user,
+                    COALESCE(p_wait.INFO, '')       AS waiter_query,
+                    bt.trx_mysql_thread_id          AS holder_pid,
+                    p_block.USER                    AS holder_user,
+                    COALESCE(p_block.INFO, '')      AS holder_query,
+                    lw.requested_lock_id            AS lock_type,
+                    lw.blocking_lock_id             AS object_name,
+                    COALESCE(p_wait.TIME, 0)        AS waited_seconds
+                FROM information_schema.INNODB_LOCK_WAITS lw
+                JOIN information_schema.INNODB_TRX wt
+                    ON wt.trx_id = lw.requesting_trx_id
+                JOIN information_schema.INNODB_TRX bt
+                    ON bt.trx_id = lw.blocking_trx_id
+                JOIN information_schema.PROCESSLIST p_wait
+                    ON p_wait.ID = wt.trx_mysql_thread_id
+                JOIN information_schema.PROCESSLIST p_block
+                    ON p_block.ID = bt.trx_mysql_thread_id
+                WHERE p_wait.ID != CONNECTION_ID()
+                  AND p_block.ID != CONNECTION_ID()
+                """
+            )
+            return await cur.fetchall()  # type: ignore[return-value]
 
     # ------------------------------------------------------------------
     # get_ddl

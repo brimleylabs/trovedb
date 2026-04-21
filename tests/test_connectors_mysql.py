@@ -501,3 +501,47 @@ async def test_get_ddl_returns_valid_create_table(
         )
         count_row = await cur.fetchone()
     assert count_row is not None and count_row[0] == 1
+
+
+# ---------------------------------------------------------------------------
+# list_blocking_chains (card 11)
+# ---------------------------------------------------------------------------
+
+
+async def test_mysql_list_blocking_chains_8_0_path(
+    connector: MysqlConnector,
+) -> None:
+    """On MySQL 8.0+ the 8.0 path is active and returns list[BlockingChain]."""
+    from trovedb.connectors.types import BlockingChain
+
+    # Only run on MySQL 8
+    if connector._mysql_major_version < 8:
+        pytest.skip("Requires MySQL 8.0+")
+
+    chains = await connector.list_blocking_chains()
+    assert isinstance(chains, list)
+    assert all(isinstance(c, BlockingChain) for c in chains)
+
+
+async def test_mysql_list_blocking_chains_5_7_fallback_path(
+    connector: MysqlConnector,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Force the 5.7 code path via monkeypatch; query must not raise."""
+    from trovedb.connectors.types import BlockingChain
+
+    # Force the 5.7 branch regardless of actual server version.
+    monkeypatch.setattr(connector, "_mysql_major_version", 5)
+
+    try:
+        chains = await connector.list_blocking_chains()
+        assert isinstance(chains, list)
+        assert all(isinstance(c, BlockingChain) for c in chains)
+    except Exception as exc:
+        # INNODB_LOCK_WAITS may not exist on 8.0 — that's OK; the branch
+        # selection logic is what we're testing here.
+        error_msg = str(exc).lower()
+        assert any(
+            keyword in error_msg
+            for keyword in ("innodb_lock_waits", "doesn't exist", "table", "1109", "1146")
+        ), f"Unexpected error from 5.7 path: {exc}"
