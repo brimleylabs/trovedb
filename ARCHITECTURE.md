@@ -203,10 +203,18 @@ trovedb/
 
 ## Built by Winston
 
-Every commit is the output of a Winston card run. The PR description for
-each commit names the card and links to its `journal.jsonl`. The
-project's own `cards/` folder contains every pre-registered card, in
-order, so anyone reading the repo can replay the build.
+Most of the build was produced by autonomous [Winston](https://github.com/brimleylabs/winston)
+card runs against specs pre-registered in `cards/`. Each run's full
+JSONL tool-call journal is committed under
+[`cards/journals/`](cards/journals/) and indexed in
+[`cards/JOURNAL_INDEX.md`](cards/JOURNAL_INDEX.md) (card → spec →
+journal → merge commit).
+
+Cards were merged directly to `main` from the agent workspace (no PRs);
+the commit log is the primary audit trail. The `JOURNAL_INDEX` also
+enumerates the handful of human hot-fix commits that are *not* card
+runs and what each one addressed — keeping the autonomous /
+human-intervention line honest.
 
 ## License
 

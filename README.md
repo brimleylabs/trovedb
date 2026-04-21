@@ -57,11 +57,19 @@ runs `EXPLAIN (ANALYZE, BUFFERS)` on the selected query.
 
 ## Built by Winston
 
-Every commit in this repo is the output of a [Winston](https://github.com/brimleylabs/winston)
-card execution. The cards (specifications) are pre-registered in
-[`cards/`](cards/) before any agent run. Each PR description names the
-card and links to the Winston run that produced it. The full build is
-auditable, end to end. This is the project that ships if Winston works.
+This project is a live case study for the [Winston](https://github.com/brimleylabs/winston)
+coding agent. 13 of the 14 cards that shipped the MVP were produced end
+to end by autonomous Winston runs against specs pre-registered in
+[`cards/`](cards/). Every card's full JSONL tool-call journal is
+committed at [`cards/journals/`](cards/journals/) and indexed — with
+merge commits and event counts — in
+[`cards/JOURNAL_INDEX.md`](cards/JOURNAL_INDEX.md).
+
+The `JOURNAL_INDEX` also lists the four **human hot-fix commits** that
+are *not* Winston card runs, with the failure each one addressed. Cards
+were merged directly from the agent's workspace to `main` (no PRs), so
+the commit log is the primary audit trail. Keeping the non-autonomous
+fixes labelled as such keeps the case study honest.
 
 ## Install
 
