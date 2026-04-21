@@ -62,6 +62,12 @@ class TroveApp(App[None]):
         yield Static("Welcome to trovedb", id="main-content")
         yield Static("?: help  q: quit", id="hint-bar")
 
+    def on_mount(self) -> None:
+        """Push the connection picker on startup."""
+        from trovedb.screens.picker import ConnectionPickerScreen  # lazy to avoid cycles
+
+        self.push_screen(ConnectionPickerScreen())
+
     def action_toggle_help(self) -> None:
         """Open the help overlay."""
         self.push_screen(HelpOverlay())
